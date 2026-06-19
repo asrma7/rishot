@@ -17,6 +17,7 @@ ShellRoot {
     property string activeTool: "rect"
     property color activeColor: Theme.vermilion
     property int activeWidth: 4
+    property var toolStyle: ({})
 
     property var model: Ann.create()
     property var draft: null
@@ -42,6 +43,19 @@ ShellRoot {
         if (textEditing) commitText();
         clearSelection();
         activeTool = t;
+        var s = toolStyle[t];
+        activeColor = s ? s.color : Theme.vermilion;
+        activeWidth = s ? s.width : 4;
+    }
+
+    function setToolColor(c) {
+        activeColor = c;
+        toolStyle[activeTool] = { color: c, width: activeWidth };
+    }
+
+    function setToolWidth(w) {
+        activeWidth = w;
+        toolStyle[activeTool] = { color: activeColor, width: w };
     }
 
     property var selectedIndex: null
@@ -693,7 +707,7 @@ ShellRoot {
                     x: Math.max(8, Math.min(toolbar.x + toolbar.colorCenterX - width / 2,
                                             win.width - width - 8))
                     y: Math.min(toolbar.y + toolbar.height + 6, win.height - height - 8)
-                    onPicked: (c) => root.activeColor = c
+                    onPicked: (c) => root.setToolColor(c)
                 }
 
                 WidthPopover {
@@ -703,7 +717,7 @@ ShellRoot {
                     x: Math.max(8, Math.min(toolbar.x + toolbar.widthCenterX - width / 2,
                                             win.width - width - 8))
                     y: Math.min(toolbar.y + toolbar.height + 6, win.height - height - 8)
-                    onPicked: (w) => { root.activeWidth = w; root.openPopover = ""; }
+                    onPicked: (w) => { root.setToolWidth(w); root.openPopover = ""; }
                 }
             }
 
