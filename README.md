@@ -12,7 +12,11 @@
 
 </div>
 
-<!-- demo.gif drops in here once recorded -->
+<div align="center">
+
+![rishot demo](assets/demo.gif)
+
+</div>
 
 Drag a region, click a window, or grab a whole monitor. Mark it up, then copy, save, or upload. rishot started as the screenshot surface in my Hyprland rice, [Ricelin](https://github.com/Gakuseei/Ricelin), and now stands on its own.
 
