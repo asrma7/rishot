@@ -42,28 +42,55 @@ print_manual_deps() {
 	say "quickshell lives in: Arch extra, Debian/Ubuntu, Fedora COPR errornointernet/quickshell, NixOS, Void."
 }
 
+# Install one optional dep, best-effort. A package missing from the distro repos
+# warns and is skipped instead of aborting, so the install always completes.
+opt_install() {
+	pm="$1"
+	pkg="$2"
+	case "$pm" in
+	yay | paru) "$pm" -S --needed --noconfirm "$pkg" >/dev/null 2>&1 ;;
+	pacman) sudo pacman -S --needed --noconfirm "$pkg" >/dev/null 2>&1 ;;
+	apt) sudo apt-get install -y "$pkg" >/dev/null 2>&1 ;;
+	dnf) sudo dnf install -y "$pkg" >/dev/null 2>&1 ;;
+	zypper) sudo zypper install -y "$pkg" >/dev/null 2>&1 ;;
+	xbps) sudo xbps-install -Sy "$pkg" >/dev/null 2>&1 ;;
+	*) return 0 ;;
+	esac || warn "optional dep '$pkg' unavailable in your repos, skipping (one rishot feature stays off)"
+}
+
+# Install the optional feature deps (save dialog, clip history, upload, stitch),
+# each best-effort so a missing one never blocks the rest.
+install_optionals() {
+	pm="$1"
+	shift
+	say "Installing optional deps (save dialog, clip history, upload, multi-monitor stitch)…"
+	for pkg in "$@"; do opt_install "$pm" "$pkg"; done
+}
+
 # Install deps. Returns non-zero if quickshell could not be handled, but never
-# aborts the script; the file install still runs.
+# aborts the script; the file install still runs. Required deps are installed
+# first; optional feature deps follow best-effort so rishot is fully usable.
 install_deps() {
 	pm="$1"
 	case "$pm" in
 	yay | paru)
 		say "Installing deps via $pm (quickshell from extra or AUR)…"
 		"$pm" -S --needed --noconfirm quickshell wl-clipboard \
-			qt6-declarative qt6-svg qt6-5compat qt6-wayland \
-			imagemagick cliphist curl || return 1
+			qt6-declarative qt6-svg qt6-5compat qt6-wayland || return 1
+		install_optionals "$pm" imagemagick cliphist curl kdialog
 		;;
 	pacman)
 		say "Installing deps via pacman…"
 		sudo pacman -S --needed --noconfirm wl-clipboard \
 			qt6-declarative qt6-svg qt6-5compat qt6-wayland \
-			imagemagick curl || warn "some pacman deps failed"
+			|| warn "some pacman deps failed"
 		if ! have qs; then
 			sudo pacman -S --needed --noconfirm quickshell 2>/dev/null || {
 				warn "quickshell not in your repos; try an AUR helper (yay/paru) for 'quickshell'"
 				return 1
 			}
 		fi
+		install_optionals pacman imagemagick cliphist curl kdialog
 		;;
 	apt)
 		say "Installing deps via apt…"
@@ -73,14 +100,14 @@ install_deps() {
 		# install fails, see the manual dep list and install quickshell yourself.
 		sudo apt-get update || true
 		sudo apt-get install -y quickshell wl-clipboard \
-			libqt6svg6 qt6-wayland \
-			imagemagick curl || return 1
+			libqt6svg6 qt6-wayland || return 1
+		install_optionals apt imagemagick cliphist curl kdialog
 		;;
 	dnf)
 		say "Installing deps via dnf…"
 		sudo dnf install -y wl-clipboard \
 			qt6-qtdeclarative qt6-qtsvg qt6-qt5compat qt6-qtwayland \
-			ImageMagick curl || warn "some dnf deps failed"
+			|| warn "some dnf deps failed"
 		# quickshell is in official Fedora 44+/Rawhide; older Fedora needs the
 		# COPR errornointernet/quickshell, which a Qt version mismatch can break.
 		if ! sudo dnf install -y quickshell; then
@@ -92,24 +119,26 @@ install_deps() {
 				return 1
 			}
 		fi
+		install_optionals dnf ImageMagick cliphist curl kdialog
 		;;
 	zypper)
 		say "Installing deps via zypper…"
 		sudo zypper install -y wl-clipboard \
 			qt6-declarative qt6-svg qt6-5compat qt6-wayland \
-			ImageMagick curl || warn "some zypper deps failed"
+			|| warn "some zypper deps failed"
 		sudo zypper install -y quickshell || {
 			warn "quickshell is not in base openSUSE repos; add an OBS repo first"
 			warn "(e.g. home:AvengeMedia:danklinux), then install 'quickshell'"
 			return 1
 		}
+		install_optionals zypper ImageMagick cliphist curl kdialog
 		;;
 	xbps)
 		say "Installing deps via xbps…"
 		# Void names the 5compat module qt6-qt5compat (not qt6-5compat).
 		sudo xbps-install -Sy quickshell wl-clipboard \
-			qt6-declarative qt6-svg qt6-qt5compat qt6-wayland \
-			ImageMagick curl || return 1
+			qt6-declarative qt6-svg qt6-qt5compat qt6-wayland || return 1
+		install_optionals xbps ImageMagick cliphist curl kdialog
 		;;
 	nix)
 		warn "Nix detected. This installer will not mutate a Nix system."
