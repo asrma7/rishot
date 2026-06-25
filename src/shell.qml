@@ -104,6 +104,27 @@ ShellRoot {
         || "https://litterbox.catbox.moe/resources/internals/api.php"
     readonly property string keybindFile: Quickshell.env("RISHOT_KEYBIND_FILE") || ""
 
+    /**
+     * KWin implements none of the screencopy protocols ScreencopyView needs, so
+     * on KDE the capture path switches to spectacle (see spectacleProc). RISHOT_CAPTURE
+     * forces a backend; otherwise KDE picks spectacle and everything else uses
+     * ScreencopyView. captureScale is spectacle's stitched-PNG scale, ceil of the
+     * largest output ratio, used to crop each output out of the full-desktop shot.
+     */
+    readonly property string captureBackend: {
+        var ov = Quickshell.env("RISHOT_CAPTURE");
+        if (ov === "spectacle" || ov === "screencopy") return ov;
+        var de = (Quickshell.env("XDG_CURRENT_DESKTOP") || "").toLowerCase();
+        return de.indexOf("kde") >= 0 ? "spectacle" : "screencopy";
+    }
+    readonly property real captureScale: {
+        var s = Quickshell.screens, m = 1;
+        for (var i = 0; i < s.length; i++) m = Math.max(m, s[i].devicePixelRatio || 1);
+        return Math.ceil(m);
+    }
+    readonly property string frozenPng: tmpDir + "/rishot-frozen.png"
+    property string frozenSource: ""
+
     /** Absolute path to the bundled torii icon, passed to notify-send -i. */
     readonly property string iconPath: {
         var u = Qt.resolvedUrl("rishot.svg").toString();
@@ -581,7 +602,33 @@ ShellRoot {
         onWindowsReady: (rects) => root.windowRects = rects
     }
 
-    Component.onCompleted: windowProvider.refresh()
+    /**
+     * KDE capture. KWin lets no unprivileged client speak a screencopy protocol,
+     * but spectacle is allowlisted for its screenshot interface, so we grab the
+     * whole desktop through it once and each overlay shows its slice. Background
+     * plus no-notify keep it silent and the default leaves the cursor out. The
+     * overlays stay unmapped until frozenSource is set so the shot never catches
+     * rishot's own surface. exit 127 means spectacle is not installed.
+     */
+    Process {
+        id: spectacleProc
+        command: ["sh", "-c",
+            "command -v spectacle >/dev/null 2>&1 || exit 127; exec spectacle -bnf -o \"$1\"",
+            "_", root.frozenPng]
+        onExited: (code) => {
+            if (code === 0) { root.frozenSource = "file://" + root.frozenPng; return; }
+            if (code === 127)
+                root.finish("rishot needs spectacle on KDE",
+                    "KWin has no screencopy protocol; install spectacle to capture", true, "");
+            else
+                root.finish("Capture failed", "spectacle exited " + code, true, "");
+        }
+    }
+
+    Component.onCompleted: {
+        windowProvider.refresh();
+        if (root.captureBackend === "spectacle") spectacleProc.running = true;
+    }
 
     Process {
         id: stitchProc
@@ -619,6 +666,7 @@ ShellRoot {
             required property var modelData
             screen: modelData
             visible: !root.dialogMode
+                && (root.captureBackend !== "spectacle" || root.frozenSource !== "")
 
             anchors { top: true; left: true; right: true; bottom: true }
             color: "transparent"
@@ -705,6 +753,9 @@ ShellRoot {
                     id: ov
                     anchors.fill: parent
                     screenData: win.modelData
+                    captureBackend: root.captureBackend
+                    captureScale: root.captureScale
+                    frozenSource: root.frozenSource
                     globalSel: root.globalSel
                     capturing: root.capturing
                     phase: root.phase

@@ -10,6 +10,17 @@ Item {
     anchors.fill: parent
 
     required property var screenData
+    property string captureBackend: "screencopy"
+    property real captureScale: 1
+    property string frozenSource: ""
+
+    /** Whichever frozen source is live, and its readiness, so the effects and
+     *  capture timer treat both backends the same. */
+    readonly property Item frozenItem: captureBackend === "spectacle" ? frozenPng : frozenWlr
+    readonly property bool frozenReady: captureBackend === "spectacle"
+        ? frozenPng.status === Image.Ready
+        : frozenWlr.hasContent
+
     property var globalSel: null
     property bool capturing: false
     property bool ready: false
@@ -72,12 +83,41 @@ Item {
         opacity: overlay.ready ? 1 : 0
         Behavior on opacity { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
 
+        /**
+         * The frozen screen image every effect and the export sample from. On
+         * wlroots a ScreencopyView grabs this output directly. KWin speaks no
+         * screencopy protocol, so there the shell hands us a full-desktop PNG
+         * from spectacle and frozenPng shows this output's slice of it (the
+         * sourceClipRect in device pixels is the logical geometry times the
+         * capture scale). Only one is live per session; both fill the overlay,
+         * so blur, pixelate, zoom, loupe and export sample the same coordinates.
+         */
         ScreencopyView {
-            id: frozen
+            id: frozenWlr
             anchors.fill: parent
-            captureSource: overlay.screenData
+            visible: overlay.captureBackend !== "spectacle"
+            captureSource: overlay.captureBackend !== "spectacle" ? overlay.screenData : null
             live: false
             paintCursor: false
+        }
+
+        Image {
+            id: frozenPng
+            anchors.fill: parent
+            visible: overlay.captureBackend === "spectacle"
+            source: overlay.captureBackend === "spectacle" ? overlay.frozenSource : ""
+            sourceClipRect: Qt.rect(overlay.sx * overlay.captureScale,
+                                    overlay.sy * overlay.captureScale,
+                                    overlay.width * overlay.captureScale,
+                                    overlay.height * overlay.captureScale)
+            fillMode: Image.Stretch
+            cache: false
+            smooth: true
+            asynchronous: true
+            onStatusChanged: {
+                if (status === Image.Error) overlay.captureTimedOut();
+                else if (status === Image.Ready && overlay.captureBackend === "spectacle") overlay.ready = true;
+            }
         }
 
         readonly property real mosaicFactor: Config.mosaicFactor
@@ -114,7 +154,7 @@ Item {
 
                 ShaderEffectSource {
                     id: blurSrc
-                    sourceItem: frozen
+                    sourceItem: overlay.frozenItem
                     anchors.fill: parent
                     live: false
                     recursive: false
@@ -159,7 +199,7 @@ Item {
 
                 ShaderEffectSource {
                     anchors.fill: parent
-                    sourceItem: frozen
+                    sourceItem: overlay.frozenItem
                     live: false
                     recursive: false
                     smooth: false
@@ -244,7 +284,7 @@ Item {
 
                     ShaderEffectSource {
                         anchors.fill: parent
-                        sourceItem: frozen
+                        sourceItem: overlay.frozenItem
                         live: false
                         recursive: false
                         smooth: true
@@ -295,11 +335,11 @@ Item {
         id: capTimer
         interval: 50
         repeat: true
-        running: true
+        running: overlay.captureBackend !== "spectacle"
         property int tries: 0
         onTriggered: {
             tries += 1;
-            if (frozen.hasContent) {
+            if (overlay.frozenReady) {
                 running = false;
                 overlay.ready = true;
             } else if (tries > 60) {
@@ -307,7 +347,7 @@ Item {
                 console.warn("rishot: screen capture timed out after 3s, no frame from compositor");
                 overlay.captureTimedOut();
             } else {
-                frozen.captureFrame();
+                frozenWlr.captureFrame();
             }
         }
     }
@@ -644,7 +684,7 @@ Item {
 
             ShaderEffectSource {
                 anchors.fill: parent
-                sourceItem: frozen
+                sourceItem: overlay.frozenItem
                 live: loupe.visible
                 recursive: false
                 smooth: false

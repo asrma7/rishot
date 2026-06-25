@@ -20,6 +20,14 @@ warn() { printf 'rishot: %s\n' "$*" >&2; }
 die() { printf 'rishot: %s\n' "$*" >&2; exit 1; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# True on a KDE/KWin session. KWin implements none of the screencopy protocols
+# the wlroots capture path needs, so on KDE rishot grabs the screen through
+# spectacle instead, which makes spectacle required there rather than optional.
+de_is_kde() {
+	printf '%s' "${XDG_CURRENT_DESKTOP:-}:${XDG_SESSION_DESKTOP:-}:${DESKTOP_SESSION:-}" \
+		| grep -iq kde
+}
+
 # Pick a package manager. AUR helpers are preferred on Arch so quickshell can be
 # pulled from the AUR if it is not already in extra.
 detect_pm() {
@@ -39,7 +47,24 @@ print_manual_deps() {
 	say "Install these yourself, then re-run:"
 	say "  required: quickshell, wl-clipboard, qt6-declarative, qt6-svg, qt6-5compat, qt6-wayland"
 	say "  optional: imagemagick, cliphist, curl, kdialog, libnotify"
+	say "  on KDE/KWin: spectacle (rishot captures through it; KWin has no screencopy protocol)"
 	say "quickshell lives in: Arch extra, Debian/Ubuntu, Fedora COPR errornointernet/quickshell, NixOS, Void."
+}
+
+# Pull spectacle on KDE, where it is the capture backend (see de_is_kde). Per-PM
+# package names differ; best-effort, but with a pointed warning if it is still
+# missing afterwards, since capture cannot work on KDE without it.
+install_kde_capture() {
+	pm="$1"
+	case "$pm" in
+	apt) pkg=kde-spectacle ;;
+	nix) warn "KDE detected: add 'kdePackages.spectacle' to your Nix env so rishot can capture"; return 0 ;;
+	unknown) warn "KDE detected: install 'spectacle' yourself; rishot captures through it on KWin"; return 0 ;;
+	*) pkg=spectacle ;;
+	esac
+	say "KDE detected: installing spectacle (rishot captures through it on KWin)…"
+	opt_install "$pm" "$pkg"
+	have spectacle || warn "spectacle is still missing; rishot cannot capture on KDE until it is installed"
 }
 
 # Install one optional dep, best-effort. A package missing from the distro repos
@@ -260,6 +285,7 @@ main() {
 	if ! install_deps "$pm"; then
 		warn "dependencies need manual attention (see above); continuing with the file install"
 	fi
+	if de_is_kde; then install_kde_capture "$pm"; fi
 
 	install_files
 	check_path
