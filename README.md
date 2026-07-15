@@ -72,7 +72,7 @@ Quickshell is in the official repos on Arch (extra), Fedora 44+, Void, and Debia
 | KDE Plasma (KWin) | yes | yes | no |
 | Wayfire / COSMIC / river | yes | yes | region + monitor only |
 
-Capture works on any wlroots or `ext-image-copy` compositor. KDE is the exception: KWin speaks no screencopy protocol, so there rishot grabs the desktop through `spectacle` instead (the installer pulls it in on KDE). Window-click, grabbing one window's frame, needs the compositor to tell rishot where each window sits. Hyprland and Sway do, Niri reports it for floating windows only, and KWin reports none, so on KDE you drag a region or grab a monitor.
+Capture works on any wlroots or `ext-image-copy` compositor. On Hyprland, rishot uses `grim` when available to freeze the desktop before its overlay appears, preserving hovered tooltips and menus. KDE is the exception: KWin speaks no screencopy protocol, so there rishot grabs the desktop through `spectacle` instead (the installer pulls it in on KDE). Window-click, grabbing one window's frame, needs the compositor to tell rishot where each window sits. Hyprland and Sway do, Niri reports it for floating windows only, and KWin reports none, so on KDE you drag a region or grab a monitor.
 
 ## Keybinding
 
@@ -90,7 +90,7 @@ Run `rishot` for region or window, `rishot monitor` for a whole output.
 
 Required: `quickshell` (the `qs` binary), Qt 6 (declarative, svg, 5compat, wayland), `wl-clipboard`.
 
-Optional: `imagemagick` (multi-monitor stitch), `cliphist` (clip history), `curl` (upload), `kdialog` (save dialog and folder picker), `libnotify` (a desktop notification when a shot is copied, saved or uploaded).
+Optional: `grim` (pre-overlay capture on Hyprland, preserving hover UI), `imagemagick` (multi-monitor stitch), `cliphist` (clip history), `curl` (upload), `kdialog` (save dialog and folder picker), `libnotify` (a desktop notification when a shot is copied, saved or uploaded).
 
 On KDE: `spectacle`, which rishot captures through since KWin has no screencopy protocol. The installer pulls it in when it sees a KDE session.
 

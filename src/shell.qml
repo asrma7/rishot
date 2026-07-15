@@ -153,6 +153,8 @@ ShellRoot {
     readonly property string uploadEndpoint: Quickshell.env("RISHOT_UPLOAD")
         || "https://litterbox.catbox.moe/resources/internals/api.php"
     readonly property string keybindFile: Quickshell.env("RISHOT_KEYBIND_FILE") || ""
+    /** A desktop image captured by the launcher before any overlay was mapped. */
+    readonly property string initialFrozenPng: Quickshell.env("RISHOT_FROZEN_PNG") || ""
 
     /**
      * KWin runs none of the screencopy protocols, so spotting a Plasma session lets
@@ -205,7 +207,7 @@ ShellRoot {
         return Math.ceil(m);
     }
     readonly property string frozenPng: tmpDir + "/rishot-frozen.png"
-    property string frozenSource: ""
+    property string frozenSource: initialFrozenPng !== "" ? "file://" + initialFrozenPng : ""
 
     /** Absolute path to the bundled torii icon, passed to notify-send -i. */
     readonly property string iconPath: {
@@ -796,7 +798,7 @@ ShellRoot {
 
     Component.onCompleted: {
         windowProvider.refresh();
-        if (root.captureBackend === "image") grabProc.start();
+        if (root.captureBackend === "image" && root.frozenSource === "") grabProc.start();
         else kwinProbe.running = true;
     }
 

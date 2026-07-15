@@ -71,4 +71,30 @@ mkdir -p "$rundir" 2>/dev/null || rundir="/tmp"
 lock="$rundir/rishot.lock"
 exec 9>"$lock"
 flock -n 9 || { echo "rishot: already running" >&2; exit 0; }
-exec env RISHOT_MODE="$mode" qs -p "$dir"
+
+# On Hyprland, freeze the desktop before Quickshell maps its layer-shell
+# windows. Mapping the overlay first transfers pointer focus away from the
+# application underneath, which closes hovered tooltips and menus before
+# ScreencopyView can capture them. grim talks to Hyprland's screencopy protocol
+# without creating a surface of its own, so the captured PNG still contains the
+# original hover state. The QML image backend then presents that already-frozen
+# frame. A missing or failed grim falls back to the existing in-overlay capture.
+precapture=""
+if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] \
+	&& [ "${RISHOT_CAPTURE:-}" != screencopy ] \
+	&& command -v grim >/dev/null 2>&1; then
+	precapture="$rundir/rishot-frozen-$$.png"
+	if ! grim "$precapture" || [ ! -s "$precapture" ]; then
+		rm -f "$precapture"
+		precapture=""
+	fi
+fi
+
+if [ -n "$precapture" ]; then
+	trap 'rm -f "$precapture"' 0
+	trap 'exit 1' HUP INT TERM
+	env RISHOT_MODE="$mode" RISHOT_CAPTURE=image \
+		RISHOT_FROZEN_PNG="$precapture" qs -p "$dir"
+else
+	exec env RISHOT_MODE="$mode" qs -p "$dir"
+fi
